@@ -14,8 +14,17 @@ build: aolibc.a
 aolibc.a: $(CUSTOM_LIB_OBJ)
 	emar r aolibc.a $(CUSTOM_LIB_OBJ)
 
+# CUSTOM_LIB_OBJ: aostdio.c
+# 	emcc -s -c aostdio.c -o aostdio.o
+
+# 32位
 CUSTOM_LIB_OBJ: aostdio.c
-	emcc -s -c aostdio.c -o aostdio.o
+	emcc -s -c aostdio.c -o aostdio.o \
+		-mwasm32 \
+		-s MEMORY64=0 \
+		-s WASM_BIGINT=1 \
+		-s INITIAL_MEMORY=16777216 \
+		-s MAXIMUM_MEMORY=2147483648
 
 # Default target
 install: build-patched update-libc

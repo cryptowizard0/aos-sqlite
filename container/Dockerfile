@@ -22,19 +22,23 @@ ENV PYTHON_VERSION 3.6.6
 RUN pip3 install pyyaml
 
 # Install lua runtime
+# RUN cd / && \
+#   curl -L http://www.lua.org/ftp/lua-${LUA_VERSION}.tar.gz | tar xzf - && \
+#   cd /lua-${LUA_VERSION} && \
+#   make linux test && \
+#   make install
+
+# Download lua source
 RUN cd / && \
-  curl -L http://www.lua.org/ftp/lua-${LUA_VERSION}.tar.gz | tar xzf - && \
-  cd /lua-${LUA_VERSION} && \
-  make linux test && \
-  make install
+  curl -L http://www.lua.org/ftp/lua-${LUA_VERSION}.tar.gz | tar xzf -
 
 # Install luarocks
-RUN cd / && \
-  curl -L https://luarocks.org/releases/luarocks-${LUAROCKS_VERSION}.tar.gz | tar xzf - && \
-  cd /luarocks-${LUAROCKS_VERSION} && \
-  ./configure && \
-  make build && \
-  make install
+# RUN cd / && \
+#   curl -L https://luarocks.org/releases/luarocks-${LUAROCKS_VERSION}.tar.gz | tar xzf - && \
+#   cd /luarocks-${LUAROCKS_VERSION} && \
+#   ./configure && \
+#   make build && \
+#   make install
 
 # Install NodeJS
 ENV NODE_VERSION=18.17.0
@@ -47,10 +51,55 @@ ENV PATH="/root/.nvm/versions/node/v${NODE_VERSION}/bin/:${PATH}"
 RUN node --version
 RUN npm --version
 
+# install clang
+RUN apt-get update && apt-get install -y \
+  clang \
+  lld \
+  llvm
+
+# 安装 wasi-sdk
+RUN curl -L https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-22/wasi-sdk-22.0-linux.tar.gz | \
+    tar xz -C /opt && \
+    ln -s /opt/wasi-sdk-22.0 /opt/wasi-sdk
+
+# 安装 WASIX https://github.com/singlestore-labs/wasix
+RUN git clone https://github.com/singlestore-labs/wasix.git /opt/wasix && \
+    cd /opt/wasix && \
+    make all_abort
+
+
+ENV WASIX_DIR=/opt/wasix
+
 # And, re-compile lua with "generic WASM"
+# RUN cd /lua-${LUA_VERSION} && \
+#   make clean && \
+#   make generic CC='emcc -s WASM=1 -s SUPPORT_LONGJMP=1' 
 RUN cd /lua-${LUA_VERSION} && \
-  make clean && \
-  make generic CC='emcc -s WASM=1 -s MEMORY64=1 -s SUPPORT_LONGJMP=1' 
+    make clean && \
+    make generic \
+    CC="/opt/wasi-sdk/bin/clang \
+        --target=wasm32-wasi \
+        --sysroot=/opt/wasi-sdk/share/wasi-sysroot \
+        -isystem /opt/wasi-sdk/share/wasi-sysroot/include/wasm32-wasi \
+        #-isystem ${WASIX_DIR}/include \
+        -O3 \
+        -mllvm -wasm-enable-sjlj \
+        -D_WASI_EMULATED_SIGNAL \
+        -D_WASI_EMULATED_PROCESS_CLOCKS \
+        -D_WASI_EMULATED_MMAN \
+        -D_WASI_EMULATED_GETPID \
+        # -D__wasilibc_unmodified_upstream \
+        -DL_tmpnam=20" \
+    AR="/opt/wasi-sdk/bin/llvm-ar rcu" \
+    RANLIB="/opt/wasi-sdk/bin/llvm-ranlib" \
+    LDFLAGS="-Wl,--export-all \
+             #-L${WASIX_DIR} -lwasix \
+             -Wl,--no-entry \
+             -Wl,--allow-undefined \
+             -Wl,--stack-first \
+             -Wl,--import-memory \
+             -Wl,--max-memory=4294967296"
+
 
 #############################
 ##### Install Commands ######
@@ -98,7 +147,14 @@ COPY ./src/main.lua /opt/main.lua
 # BUILD WeaveDrive Extension Helper
 ###################################
 COPY ./src/aolibc /opt/aolibc
-RUN cd /opt/aolibc && make CC="emcc -s WASM=1 -s MEMORY64=1 -s SUPPORT_LONGJMP=1"
+# RUN cd /opt/aolibc && make CC="emcc -s WASM=1 -s MEMORY64=1 -s SUPPORT_LONGJMP=1"
+RUN cd /opt/aolibc && make CC="emcc -s WASM=1 -s SUPPORT_LONGJMP=1"
+# RUN cd /opt/aolibc && make CC="/opt/wasi-sdk/bin/clang \
+#     --target=wasm32-wasi \
+#     --sysroot=/opt/wasi-sdk/share/wasi-sysroot \
+#     -D_WASI_EMULATED_SIGNAL \
+#     -D_WASI_EMULATED_PROCESS_CLOCKS \
+#     -D_WASI_EMULATED_MMAN"
 
 
 RUN chmod +x /usr/local/bin/emcc-lua

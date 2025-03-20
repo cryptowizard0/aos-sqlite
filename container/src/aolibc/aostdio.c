@@ -57,20 +57,20 @@ int fclose(FILE* stream) {
      return 0;  // Returning success, adjust as necessary
 }
 
-void* realloc(void* ptr, size_t size) {
-    void* new_ptr = memalign(16, size);
-    memcpy(new_ptr, ptr, size);
-    free(ptr);
-    //AO_LOG("DBG: Realloc called: %p -> %p, size: %zu\n", ptr, new_ptr, size);
-    return new_ptr;
-}
+// void* realloc(void* ptr, size_t size) {
+//     void* new_ptr = memalign(16, size);
+//     memcpy(new_ptr, ptr, size);
+//     free(ptr);
+//     //AO_LOG("DBG: Realloc called: %p -> %p, size: %zu\n", ptr, new_ptr, size);
+//     return new_ptr;
+// }
 
 // Emscripten malloc does not align to 16 bytes correctly, which causes some 
 // programs that use aligned memory (for example, those that use SIMD...) to
 // crash. So we need to use the aligned allocator.
-void* malloc(size_t size) {
-    return memalign(16, size);
-}
+// void* malloc(size_t size) {
+//     return memalign(16, size);
+// }
 
 int madvise(void* addr, size_t length, int advice) {
     AO_LOG("AO: madvise called with addr: %p, length: %zu, advice: %d\n", addr, length, advice);

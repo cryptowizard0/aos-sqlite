@@ -162,75 +162,51 @@ def main():
             with open('/opt/compile.c', mode='w') as build:
                 build.write(c_program)
 
-    shell_exec('cp', '/opt/compile.c', '/src/compile.c')
     # Finally, compile to wasm
     debug_print('Start to compile as WASM')
-    # cmd = ['emcc', '-O3']
-    # cmd.extend([
-    #     '-g2',
-    #     '-s', 'MEMORY64=1',
-    #     '-s', 'STACK_SIZE=41943040',
-    #     '-s', 'ALLOW_MEMORY_GROWTH=1',
-    #     '-s', 'INITIAL_MEMORY=83886080',
-    #     '-s', 'MAXIMUM_MEMORY=17179869184',
-    #     '-s', 'WASM=1',
-    #     '-s', 'STANDALONE_WASM=1',
-    #     '-s', 'DETERMINISTIC=1',
-    #     '-s', 'WASM_BIGINT=1',
-    #     '-s', 'IMPORTED_MEMORY=1',
-    #     '-s', 'SUPPORT_LONGJMP=1',  # 确保这个选项在这里并且值为 1
-    # ])
-    
-    # 处理静态库的符号表
-    debug_print('Processing static libraries with ranlib')
-    shell_exec('/opt/wasi-sdk/bin/ranlib', quote('/lua-{}/src/liblua.a'.format(os.environ.get('LUA_VERSION'))))
-    shell_exec('/opt/wasi-sdk/bin/ranlib', '/opt/aolibc/aolibc.a')
-
-    # 32 位 wasm
-    debug_print('Start to compile as WASM')
-    cmd = ['/opt/wasi-sdk/bin/clang']  # 使用 wasi-sdk 的 clang
+    cmd = ['emcc', '-O3']
     cmd.extend([
-        '--target=wasm32-wasi',
-        '-O3',
-        '-g',
-        '-nostartfiles',
-        '-D_WASI_EMULATED_SIGNAL',    # 启用信号模拟
-        '-D_WASI_EMULATED_SETJMP', # 启用 setjmp 模拟
-        '-Wl,--export-all',
-        '-Wl,--no-entry',
-        '-Wl,--allow-undefined',
-        '-Wl,--stack-first',          # 优化栈内存布局
-        '-Wl,--initial-memory=16777216',  # 16MB 初始内存
-        '-Wl,--max-memory=2147483648',    # 2GB 最大内存
-        # '-Wl,--allow-undefined-file=/opt/aolibc/aolibc.syms',  
+        '-g2',
+        '-s', 'MEMORY64=1',
+        # '-s', 'ASYNCIFY=1',
+        '-s', 'STACK_SIZE=41943040',
+        '-s', 'ASYNCIFY_STACK_SIZE=41943040',
+        '-s', 'ALLOW_MEMORY_GROWTH=1',
+        '-s', 'INITIAL_MEMORY=83886080',
+        '-s', 'MAXIMUM_MEMORY=17179869184',
+        '-s', 'WASM=1',
+        '-s', 'STANDALONE_WASM=1',  # 添加这个
+        # '-s', 'MODULARIZE', 
+        '-s', 'DETERMINISTIC=1', 
+        # '-s', 'NODERAWFS=0',
+        '-s', 'PURE_WASI=1', # 添加wasi支持
+        '-s', 'WASM_BIGINT=1',  # 添加这个支持 64 位内存
+        '-s', 'IMPORTED_MEMORY=0',  # 改为 0
+        '-s', 'SUPPORT_LONGJMP=1',
+        # '-msimd128' # 删除这个
     ])
-
-    # 添加必要的头文件路径
-    cmd.extend([
-        '-I/opt/aolibc',  # aolibc 头文件优先
-        '-I', quote('/lua-{}/src'.format(os.environ.get('LUA_VERSION'))),
-        '-I/opt/wasi-sdk/share/wasi-sysroot/include'  # 添加 wasi 系统头文件
-    ])
-    
-    # 添加库文件
     cmd.extend(['-L/opt/aolibc', '-l:aolibc.a'])
-    cmd.extend([quote(v.filepath) for v in link_libraries])
-
-    # 添加源文件
+    cmd.extend(['-s', 'ASSERTIONS=1'])
+    # cmd.extend(['--pre-js', '/opt/pre.js']) # 移除
+    cmd.extend(definition.get_extra_args())
+    cmd.extend(['-I', quote('/lua-{}/src'.format(os.environ.get('LUA_VERSION')))])
+    # cmd.extend(['-I', '/opt'])
+    # cmd.extend(['/opt/lsqlite3.c', '/opt/sqlite3.c'])
     cmd.extend(['/opt/compile.c', quote('/lua-{}/src/liblua.a'.format(os.environ.get('LUA_VERSION')))])
     cmd.extend(['/opt/lsqlite3.c', '/opt/sqlite3.c'])
+
+    # cmd.extend(['-I', '/opt'])
+    cmd.extend([quote(v.filepath) for v in link_libraries])
+    cmd.extend(['-s', 'EXPORTED_FUNCTIONS=["_malloc"]'])
     
-    # 设置输出文件
-    cmd.extend(['-o', definition.get_output_file()])
-    
+    # cmd.extend(['-lm', '-ldl', '-o', definition.get_output_file(), '-s', 'EXPORTED_RUNTIME_METHODS=["cwrap"]']) # 移除
     print('Compile command is {}'.format(' '.join(cmd)))
     shell_exec(*cmd)
-
 
     # add metering library
     # meter_cmd = ['node', '/opt/node/apply-metering.cjs']
     # shell_exec(*meter_cmd)
-    # shell_exec(*['rm', '/src/process.js'])
+    shell_exec(*['rm', '/src/process.js'])
 
 if __name__ == '__main__':
     main()

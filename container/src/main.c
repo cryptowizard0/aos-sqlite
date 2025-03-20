@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <signal.h>
 
-#include <emscripten.h>
+//#include <emscripten.h>
 
 int boot_lua(lua_State* L);
 static lua_State *wasm_lua_state = NULL;

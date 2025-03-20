@@ -74,7 +74,7 @@ class Definition():
 
     def make_function_delarations(self):
         template = '''
-EMSCRIPTEN_KEEPALIVE
+__attribute__((visibility("default")))
 {} {}({}) {{
   if (wasm_lua_state == NULL) {{
     wasm_lua_state = luaL_newstate();
